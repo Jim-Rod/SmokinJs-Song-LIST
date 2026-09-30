@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Band Setlist & Live View</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 10px;
+    }
+    
+    /* Sticky Top Banner */
+    .top-bar {
+      position: sticky;
+      top: 0;
+      background-color: #111111;
+      border-bottom: 3px solid #ffff00;
+      padding: 12px 10px;
+      z-index: 1000;
+    }
+    
+    .clock {
+      font-size: 3.5rem;
+      font-weight: 900;
+      text-align: center;
+      color: #ffff00;
+      letter-spacing: 2px;
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+    
+    /* Filter Buttons */
+    .filter-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+    
+    .filter-btn {
+      background-color: #222222;
+      color: #ffffff;
+      border: 2px solid #555555;
+      font-size: 1.2rem;
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    
+    .filter-btn.active {
+      background-color: #ffff00;
+      color: #000000;
+      border-color: #ffff00;
+    }
+
+    /* Song List Display */
+    .song-list {
+      margin-top: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .song-card {
+      background-color: #181818;
+      border: 1px solid #333333;
+      border-left: 8px solid #ffff00;
+      padding: 14px 18px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .song-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .song-title {
+      font-size: 1.6rem;
+      font-weight: bold;
+      color: #ffffff;
+    }
+    
+    .song-artist {
+      font-size: 1.2rem;
+      color: #bbbbbb;
+    }
+    
+    .singer-badge {
+      font-size: 1.3rem;
+      font-weight: 900;
+      background-color: #333333;
+      color: #ffff00;
+      padding: 6px 14px;
+      border-radius: 6px;
+      min-width: 70px;
+      text-align: center;
+    }
+
+    .loading-status {
+      text-align: center;
+      font-size: 1.5rem;
+      color: #ffff00;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div class="clock" id="clock">00:00:00</div>
+    <div class="filter-container" id="filter-buttons">
+      <button class="filter-btn active" onclick="filterSongs('ALL', this)">ALL</button>
+      <button class="filter-btn" onclick="filterSongs('Carla', this)">Carla</button>
+      <button class="filter-btn" onclick="filterSongs('JW', this)">JW</button>
+      <button class="filter-btn" onclick="filterSongs('Tony', this)">Tony</button>
+      <button class="filter-btn" onclick="filterSongs('JD', this)">JD</button>
+      <button class="filter-btn" onclick="filterSongs('None', this)">Unassigned</button>
+    </div>
+  </div>
+
+  <div class="song-list" id="song-list">
+    <div class="loading-status">Loading live song list...</div>
+  </div>
+
+  <script>
+    // URL of published Google Sheet in CSV format
+    const SHEET_CSV_URL = https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5fLA--i2H-_97VvueTHYmyBJc4QSlqA4AMoaR4CTQJmJHZzYUm2XZwkkA9gax7hKHsl5eSjAuAa-U/pub?output=csv;
+
+    let songsData = [];
+    let currentFilter = 'ALL';
+
+    // Live Clock
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Parse CSV helper function
+    function parseCSV(csvText) {
+      const lines = csvText.trim().split('\n');
+      const result = [];
+      
+      // Skip header row
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Match CSV fields supporting quotes
+        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+        const cleanValues = values.map(val => val.replace(/^"|"$/g, '').trim());
+
+        if (cleanValues.length >= 2) {
+          result.push({
+            artist: cleanValues[0] || 'Unknown',
+            title: cleanValues[1] || 'Untitled',
+            singer: cleanValues[2] || ''
+          });
+        }
+      }
+      return result;
+    }
+
+    // Fetch dynamic dataset from Google Sheets CSV
+    async function loadLiveData() {
+      try {
+        const response = await fetch(SHEET_CSV_URL);
+        if (!response.ok) throw new Error('Network response error');
+        
+        const csvText = await response.text();
+        songsData = parseCSV(csvText);
+        
+        const activeBtn = document.querySelector('.filter-btn.active');
+        filterSongs(currentFilter, activeBtn);
+      } catch (error) {
+        console.error('Error fetching sheet data:', error);
+        document.getElementById('song-list').innerHTML = 
+          '<div class="loading-status" style="color: #ff4444;">Unable to load live sheet. Check CSV URL publishing settings.</div>';
+      }
+    }
+
+    function renderSongs(list) {
+      const container = document.getElementById('song-list');
+      container.innerHTML = '';
+
+      if (list.length === 0) {
+        container.innerHTML = '<div class="loading-status">No songs found for this selection.</div>';
+        return;
+      }
+
+      list.forEach(song => {
+        const card = document.createElement('div');
+        card.className = 'song-card';
+        card.innerHTML = `
+          <div class="song-details">
+            <div class="song-title">${song.title}</div>
+            <div class="song-artist">${song.artist}</div>
+          </div>
+          <div class="singer-badge">${song.singer || '—'}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function filterSongs(singer, btnElement) {
+      currentFilter = singer;
+      if (btnElement) {
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        btnElement.classList.add('active');
+      }
+
+      if (singer === 'ALL') {
+        renderSongs(songsData);
+      } else if (singer === 'None') {
+        renderSongs(songsData.filter(s => !s.singer));
+      } else {
+        renderSongs(songsData.filter(s => s.singer === singer));
+      }
+    }
+
+    // Load initial data and refresh automatically every 5 minutes
+    loadLiveData();
+    setInterval(loadLiveData, 300000);
+  </script>
+</body>
+</html>
