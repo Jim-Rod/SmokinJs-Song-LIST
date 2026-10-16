@@ -91,11 +91,15 @@
       font-size: 1.6rem;
       font-weight: bold;
       color: #ffffff;
+      white-space: normal;
+      word-wrap: break-word;
     }
     
     .song-artist {
       font-size: 1.2rem;
       color: #bbbbbb;
+      white-space: normal;
+      word-wrap: break-word;
     }
     
     .singer-badge {
@@ -153,25 +157,48 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Parse CSV helper function
+    // Robust CSV parser that handles quoted fields and commas inside quotes
     function parseCSV(csvText) {
-      const lines = csvText.trim().split('\n');
+      const lines = csvText.trim().split(/\r?\n/);
       const result = [];
-      
-      // Skip header row
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        // Match CSV fields supporting quotes
-        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-        const cleanValues = values.map(val => val.replace(/^"|"$/g, '').trim());
 
-        if (cleanValues.length >= 2) {
+      function parseLine(line) {
+        const fields = [];
+        let field = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            // handle escaped double quotes ""
+            if (inQuotes && line[i + 1] === '"') {
+              field += '"';
+              i++; // skip next quote
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (ch === ',' && !inQuotes) {
+            fields.push(field);
+            field = '';
+          } else {
+            field += ch;
+          }
+        }
+        fields.push(field);
+        // Trim whitespace and surrounding quotes from each field
+        return fields.map(f => f.replace(/^\s*"|"\s*$/g, '').trim());
+      }
+
+      // Skip header row if present
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line || !line.trim()) continue;
+
+        const values = parseLine(line);
+        if (values.length >= 2) {
           result.push({
-            artist: cleanValues[0] || 'Unknown',
-            title: cleanValues[1] || 'Untitled',
-            singer: cleanValues[2] || ''
+            artist: values[0] || 'Unknown',
+            title: values[1] || 'Untitled',
+            singer: values[2] || ''
           });
         }
       }
@@ -183,10 +210,10 @@
       try {
         const response = await fetch(SHEET_CSV_URL);
         if (!response.ok) throw new Error('Network response error');
-        
+
         const csvText = await response.text();
         songsData = parseCSV(csvText);
-        
+
         const activeBtn = document.querySelector('.filter-btn.active');
         filterSongs(currentFilter, activeBtn);
       } catch (error) {
@@ -210,13 +237,24 @@
         card.className = 'song-card';
         card.innerHTML = `
           <div class="song-details">
-            <div class="song-title">${song.title}</div>
-            <div class="song-artist">${song.artist}</div>
+            <div class="song-title">${escapeHtml(song.title)}</div>
+            <div class="song-artist">${escapeHtml(song.artist)}</div>
           </div>
-          <div class="singer-badge">${song.singer || '—'}</div>
+          <div class="singer-badge">${escapeHtml(song.singer) || '—'}</div>
         `;
         container.appendChild(card);
       });
+    }
+
+    // basic HTML escape to avoid injection if sheet contains HTML
+    function escapeHtml(str) {
+      if (!str && str !== 0) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
 
     function filterSongs(singer, btnElement) {
