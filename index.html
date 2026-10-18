@@ -90,9 +90,8 @@
 
       <div class="filter-container" id="view-buttons">
         <button class="view-btn" onclick="showAllSongs(this)">Live List</button>
-        <button class="view-btn" onclick="showSetGrouped(this)">Set by # (grouped)</button>
-        <button class="view-btn" onclick="showSetSorted(this)">Set + Order (sorted)</button>
         <button class="view-btn" onclick="showSetBoys(this)">SET - The Boys</button>
+        <button class="view-btn" onclick="showSetFullJs(this)">SET - Full J's 4</button>
       </div>
     </div>
   </div>
@@ -103,10 +102,12 @@
 
   <script>
     const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5fLA--i2H-_97VvueTHYmyBJc4QSlqA4AMoaR4CTQJmJHZzYUm2XZwkkA9gax7hKHsl5eSjAuAa-U/pub?output=csv';
-    const SETLIST_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQDFlEfmdkifR2rOWqJ0C_qHX6aUm96PVNr_qhYwZvKe6OU1sU3rO8vWcChfQn2u5sjOoPmxqmW2DLT/pub?gid=0&single=true&output=csv';
+    const SETLIST_BOYS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQDFlEfmdkifR2rOWqJ0C_qHX6aUm96PVNr_qhYwZvKe6OU1sU3rO8vWcChfQn2u5sjOoPmxqmW2DLT/pub?gid=0&single=true&output=csv';
+    const SETLIST_FULLJS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQBaDHDAmscYm5YQfKq0b8dwjRWJrReOR2mYyYV598G_q4Cgv3BIGsMVjEMHvfjb4prRzl4ultNeVTD/pub?gid=0&single=true&output=csv';
 
     let songsData = [];
-    let setlistData = null; // cached parsed setlist with originalIndex
+    let setlistBoys = null; // cached parsed setlist with originalIndex
+    let setlistFullJs = null;
     let currentFilter = 'ALL';
     let currentView = 'LIVE';
 
@@ -120,20 +121,11 @@
     setInterval(updateClock,1000);
     updateClock();
 
-    // Simple CSV parser that respects quotes
+    // header-aware CSV parser
     function parseCSVWithHeader(csvText){
       const lines = csvText.split(/\r?\n/).filter(l=>l.trim().length>0);
       if(lines.length===0) return [];
-      function parseLine(line){
-        const fields=[]; let field=''; let inQuotes=false;
-        for(let i=0;i<line.length;i++){ const ch=line[i];
-          if(ch==='"'){ if(inQuotes && line[i+1]==='"'){ field+='"'; i++; } else { inQuotes=!inQuotes; } }
-          else if(ch===',' && !inQuotes){ fields.push(field); field=''; }
-          else field+=ch;
-        }
-        fields.push(field);
-        return fields.map(f=>f.replace(/^\s*"|"\s*$/g,'').trim());
-      }
+      function parseLine(line){ const fields=[]; let field=''; let inQuotes=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(inQuotes && line[i+1]==='"'){ field+='"'; i++; } else { inQuotes=!inQuotes; } } else if(ch===',' && !inQuotes){ fields.push(field); field=''; } else field+=ch; } fields.push(field); return fields.map(f=>f.replace(/^\s*"|"\s*$/g,'').trim()); }
       const headers = parseLine(lines[0]);
       const out = [];
       for(let i=1;i<lines.length;i++){ const vals=parseLine(lines[i]); const obj={}; for(let j=0;j<headers.length;j++){ obj[headers[j]] = vals[j] || ''; } out.push(obj); }
@@ -158,12 +150,10 @@
         const resp = await fetch(SHEET_CSV_URL);
         if(!resp.ok) throw new Error('Network response error');
         const txt = await resp.text();
-        // parse simple two/three column CSV (artist,title,singer)
         const lines = txt.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
         songsData = [];
         for(let i=1;i<lines.length;i++){
           const line = lines[i];
-          // naive parse respecting quotes
           const values = (function parseLine(line){ const fields=[]; let field=''; let inQ=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(inQ && line[i+1]==='"'){ field+='"'; i++; } else { inQ=!inQ; } } else if(ch===',' && !inQ){ fields.push(field); field=''; } else field+=ch; } fields.push(field); return fields.map(f=>f.replace(/^\s*"|"\s*$/g,'').trim()); })(line);
           if(values.length>=2){ songsData.push({ artist: values[0]||'Unknown', title: values[1]||'Untitled', singer: values[2]||'' }); }
         }
@@ -174,17 +164,9 @@
       }catch(err){ console.error('Error loading live data', err); document.getElementById('song-list').innerHTML = '<div class="loading-status" style="color:#ff4444;">Unable to load live sheet. Check CSV URL publishing settings.</div>'; }
     }
 
-    async function loadSetlistIfNeeded(){
-      if(setlistData) return setlistData;
-      try{
-        const resp = await fetch(SETLIST_CSV_URL);
-        if(!resp.ok) throw new Error('Network response error (setlist)');
-        const txt = await resp.text();
-        const parsed = parseCSVWithHeader(txt);
-        setlistData = parsed.map((p,idx)=>normalizeSetEntry(p, idx));
-        return setlistData;
-      }catch(err){ console.error('Error loading setlist', err); setlistData = []; return setlistData; }
-    }
+    async function loadSetlistBoysIfNeeded(){ if(setlistBoys) return setlistBoys; try{ const resp=await fetch(SETLIST_BOYS_URL); if(!resp.ok) throw new Error('Network response error (setlist boys)'); const txt=await resp.text(); const parsed = parseCSVWithHeader(txt); setlistBoys = parsed.map((p,idx)=>normalizeSetEntry(p,idx)); return setlistBoys; }catch(err){ console.error('Error loading setlist boys', err); setlistBoys = []; return setlistBoys; } }
+
+    async function loadSetlistFullJsIfNeeded(){ if(setlistFullJs) return setlistFullJs; try{ const resp=await fetch(SETLIST_FULLJS_URL); if(!resp.ok) throw new Error('Network response error (setlist fulljs)'); const txt=await resp.text(); const parsed = parseCSVWithHeader(txt); setlistFullJs = parsed.map((p,idx)=>normalizeSetEntry(p,idx)); return setlistFullJs; }catch(err){ console.error('Error loading setlist fulljs', err); setlistFullJs = []; return setlistFullJs; } }
 
     function escapeHtml(str){ if(!str && str!==0) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
 
@@ -198,16 +180,15 @@
 
     function showAllSongs(btn){ currentView='LIVE'; setActiveViewButton('Live List'); const activeSingerBtn=document.querySelector('.filter-btn.active'); const singer = activeSingerBtn? activeSingerBtn.textContent.trim() : 'ALL'; filterSongs(singer, activeSingerBtn); }
 
-    async function showSetGrouped(btn){ currentView='SET_GROUPED'; setActiveViewButton('Set by # (grouped)'); btn&&btn.classList.add('active'); const data = await loadSetlistIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const groups={}; data.forEach(d=>{ const key = d.setNum==null ? 'zz' : String(d.setNum); if(!groups[key]) groups[key]=[]; groups[key].push(d); }); const keys = Object.keys(groups).sort((a,b)=>{ if(a==='zz') return 1; if(b==='zz') return -1; return Number(a)-Number(b); }); keys.forEach(k=>{ const header=document.createElement('div'); header.className='set-header'; header.textContent = (k==='zz') ? 'Unassigned Set' : 'Set '+k; container.appendChild(header); groups[k].forEach(item=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(item.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(item.title)}</div><div class="song-artist">${escapeHtml(item.artist)}</div><div class="song-meta">${item.order? 'Order: '+item.order : ''}</div></div><div class="singer-badge">${escapeHtml(item.singer)||'—'}</div>`; container.appendChild(card); }); }); }
+    async function showSetBoys(btn){ currentView='SET_BOYS'; setActiveViewButton('SET - The Boys'); btn&&btn.classList.add('active'); const data = await loadSetlistBoysIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const ordered = data.slice().sort((a,b)=>a.originalIndex - b.originalIndex); ordered.forEach(item=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(item.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(item.title)}</div><div class="song-meta">${item.setNum? 'Set: '+item.setNum : ''}</div></div><div class="singer-badge">${escapeHtml(item.singer)||'—'}</div>`; container.appendChild(card); }); }
 
-    async function showSetSorted(btn){ currentView='SET_SORTED'; setActiveViewButton('Set + Order (sorted)'); btn&&btn.classList.add('active'); const data = await loadSetlistIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const sorted = data.slice().sort((a,b)=>{ const aSet = a.setNum==null?9999:a.setNum; const bSet = b.setNum==null?9999:b.setNum; if(aSet!==bSet) return aSet-bSet; const aOrder = a.order==null?9999:a.order; const bOrder = b.order==null?9999:b.order; return aOrder-bOrder; }); renderSongs(sorted); }
-
-    // New: preserve CSV order, show only SONG (title) and color by set number
-    async function showSetBoys(btn){ currentView='SET_BOYS'; setActiveViewButton('SET - The Boys'); btn&&btn.classList.add('active'); const data = await loadSetlistIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const ordered = data.slice().sort((a,b)=>a.originalIndex - b.originalIndex); ordered.forEach(item=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(item.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(item.title)}</div><div class="song-meta">${item.setNum? 'Set: '+item.setNum : ''}</div></div><div class="singer-badge">${escapeHtml(item.singer)||'—'}</div>`; container.appendChild(card); }); }
+    async function showSetFullJs(btn){ currentView='SET_FULLJS'; setActiveViewButton("SET - Full J's 4"); btn&&btn.classList.add('active'); const data = await loadSetlistFullJsIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const ordered = data.slice().sort((a,b)=>a.originalIndex - b.originalIndex); ordered.forEach(item=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(item.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(item.title)}</div><div class="song-meta">${item.setNum? 'Set: '+item.setNum : ''}</div></div><div class="singer-badge">${escapeHtml(item.singer)||'—'}</div>`; container.appendChild(card); }); }
 
     // initial load
     loadLiveData();
-    loadSetlistIfNeeded();
+    // prefetch setlists
+    loadSetlistBoysIfNeeded();
+    loadSetlistFullJsIfNeeded();
     setInterval(loadLiveData, 300000);
 
   </script>
