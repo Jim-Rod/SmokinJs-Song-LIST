@@ -67,8 +67,6 @@
     .singer-badge { font-size:1.1rem; font-weight:900; background:#1f1f1f; color:#ff0; padding:6px 12px; border-radius:6px; min-width:70px; text-align:center; }
     .loading-status { text-align:center; font-size:1.2rem; color:#ff0; margin-top:18px; }
 
-    .set-header { font-size:1.25rem; font-weight:900; color:#ff0; padding:6px 8px; background:rgba(255,255,0,0.06); border-left:6px solid #ff0; border-radius:4px; margin-top:6px; }
-
   </style>
 </head>
 <body>
@@ -89,7 +87,6 @@
       <div style="width:16px;"></div>
 
       <div class="filter-container" id="view-buttons">
-        <button class="view-btn" onclick="showAllSongs(this)">Live List</button>
         <button class="view-btn" onclick="showSetBoys(this)">SET - The Boys</button>
         <button class="view-btn" onclick="showSetFullJs(this)">SET - Full J's 4</button>
       </div>
@@ -106,7 +103,7 @@
     const SETLIST_FULLJS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQBaDHDAmscYm5YQfKq0b8dwjRWJrReOR2mYyYV598G_q4Cgv3BIGsMVjEMHvfjb4prRzl4ultNeVTD/pub?gid=0&single=true&output=csv';
 
     let songsData = [];
-    let setlistBoys = null; // cached parsed setlist with originalIndex
+    let setlistBoys = null;
     let setlistFullJs = null;
     let currentFilter = 'ALL';
     let currentView = 'LIVE';
@@ -121,7 +118,6 @@
     setInterval(updateClock,1000);
     updateClock();
 
-    // header-aware CSV parser
     function parseCSVWithHeader(csvText){
       const lines = csvText.split(/\r?\n/).filter(l=>l.trim().length>0);
       if(lines.length===0) return [];
@@ -174,19 +170,15 @@
 
     function renderSongs(list){ const container=document.getElementById('song-list'); container.innerHTML=''; if(!list||list.length===0){ container.innerHTML='<div class="loading-status">No songs found for this selection.</div>'; return; } list.forEach(song=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(song.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(song.title)}</div><div class="song-artist">${escapeHtml(song.artist)}</div><div class="song-meta">${song.setNum? 'Set: '+song.setNum + (song.order? ' • Order: '+song.order : '') : ''}</div></div><div class="singer-badge">${escapeHtml(song.singer)||'—'}</div>`; container.appendChild(card); }); }
 
-    function filterSongs(singer, btnElement){ currentFilter=singer; setActiveViewButton('Live List'); currentView='LIVE'; if(btnElement){ document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btnElement.classList.add('active'); } if(singer==='ALL'){ renderSongs(songsData); } else if(singer==='None'){ renderSongs(songsData.filter(s=>!s.singer)); } else { renderSongs(songsData.filter(s=>s.singer===singer)); } }
+    function filterSongs(singer, btnElement){ currentFilter=singer; setActiveViewButton(''); currentView='LIVE'; if(btnElement){ document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btnElement.classList.add('active'); } if(singer==='ALL'){ renderSongs(songsData); } else if(singer==='None'){ renderSongs(songsData.filter(s=>!s.singer)); } else { renderSongs(songsData.filter(s=>s.singer===singer)); } }
 
     function setActiveViewButton(label){ document.querySelectorAll('.view-btn').forEach(b=>{ b.classList.toggle('active', b.textContent.trim()===label); }); }
-
-    function showAllSongs(btn){ currentView='LIVE'; setActiveViewButton('Live List'); const activeSingerBtn=document.querySelector('.filter-btn.active'); const singer = activeSingerBtn? activeSingerBtn.textContent.trim() : 'ALL'; filterSongs(singer, activeSingerBtn); }
 
     async function showSetBoys(btn){ currentView='SET_BOYS'; setActiveViewButton('SET - The Boys'); btn&&btn.classList.add('active'); const data = await loadSetlistBoysIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const ordered = data.slice().sort((a,b)=>a.originalIndex - b.originalIndex); ordered.forEach(item=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(item.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(item.title)}</div><div class="song-meta">${item.setNum? 'Set: '+item.setNum : ''}</div></div><div class="singer-badge">${escapeHtml(item.singer)||'—'}</div>`; container.appendChild(card); }); }
 
     async function showSetFullJs(btn){ currentView='SET_FULLJS'; setActiveViewButton("SET - Full J's 4"); btn&&btn.classList.add('active'); const data = await loadSetlistFullJsIfNeeded(); const container=document.getElementById('song-list'); container.innerHTML=''; if(!data||data.length===0){ container.innerHTML='<div class="loading-status">No setlist data available.</div>'; return; } const ordered = data.slice().sort((a,b)=>a.originalIndex - b.originalIndex); ordered.forEach(item=>{ const card=document.createElement('div'); card.className='song-card'; const titleColor=colorForSet(item.setNum); card.innerHTML = `<div class="song-details"><div class="song-title" style="color:${titleColor};">${escapeHtml(item.title)}</div><div class="song-meta">${item.setNum? 'Set: '+item.setNum : ''}</div></div><div class="singer-badge">${escapeHtml(item.singer)||'—'}</div>`; container.appendChild(card); }); }
 
-    // initial load
     loadLiveData();
-    // prefetch setlists
     loadSetlistBoysIfNeeded();
     loadSetlistFullJsIfNeeded();
     setInterval(loadLiveData, 300000);
