@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Band Setlist & Live View</title>
   <style>
+    :root { --clock-height: 25vh; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
@@ -14,21 +15,27 @@
       padding: 10px;
     }
 
+    /* Reserve space for the fixed clock so content doesn't jump */
     .top-bar {
       position: sticky;
       top: 0;
       background-color: #0b0b0b;
       border-bottom: 3px solid #ff0;
-      padding: 12px 10px;
+      /* push controls down by the clock height plus original padding */
+      padding: calc(var(--clock-height) + 12px) 10px 12px 10px;
       z-index: 1000;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
 
-    /* Clock takes at least 1/4 of viewport height */
+    /* Fixed clock always visible */
     .clock {
-      height: 25vh;
+      position: fixed;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      height: var(--clock-height);
       min-height: 72px;
       display: flex;
       align-items: center;
@@ -38,8 +45,14 @@
       letter-spacing: 2px;
       line-height: 1;
       text-align: center;
-      width: 100%;
+      width: calc(100% - 40px);
+      max-width: 1200px;
       font-size: clamp(2.5rem, 10vw, 8rem);
+      background: rgba(11,11,11,0.85);
+      border-radius: 8px;
+      padding: 6px 12px;
+      z-index: 2000;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.6);
     }
 
     .controls-row { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; align-items:center; }
@@ -71,9 +84,9 @@
 </head>
 <body>
 
-  <div class="top-bar">
-    <div class="clock" id="clock">00:00:00</div>
+  <div class="clock" id="clock">00:00:00</div>
 
+  <div class="top-bar">
     <div class="controls-row">
       <div class="filter-container" id="filter-buttons">
         <button class="filter-btn active" onclick="filterSongs('ALL', this)">ALL</button>
